@@ -1,0 +1,8 @@
+# a conexão com o DuckDB
+poc_dbt_lakehouse:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: dev.duckdb
+      threads: 4
