@@ -45,7 +45,7 @@ config.
 
 ---
 
-## Etapa 1 — Inicializar o projeto dbt + conectar no DuckDB — EM ANDAMENTO
+## Etapa 1 — Inicializar o projeto dbt + conectar no DuckDB — 2026-09-07
 
 **Objetivo:** um `dbt debug` verde, sem nenhum model ainda. Só esqueleto + conexão.
 
@@ -101,9 +101,82 @@ Depois: `mkdir -p models` e `dbt debug`.
   (ver [materializacoes.md](02-camadas-e-dbt/materializacoes.md)).
 - `path: dev.duckdb` — o banco inteiro é esse arquivo (está no `.gitignore`).
 
-**Resultado:** _(preencher quando o `dbt debug` passar)_
+**Resultado:** `dbt debug` verde — `profiles.yml` e `dbt_project.yml` válidos,
+conexão com o `dev.duckdb` ok. Nenhum model ainda.
 
-**Pendências / aprendizados:** _(preencher)_
+**Pendências / aprendizados:**
+- Python 3.14 no venv: a preocupação da Etapa 0 (sem wheel pronta) não se
+  confirmou — `dbt-core 1.12.3` + `dbt-duckdb 1.11.0` instalaram e rodam normal.
+- O bloco `models:` do `dbt_project.yml` gera um warning *"unused configuration
+  paths"* enquanto não existir nenhum `.sql` nas pastas `staging/` etc. Some na
+  Etapa 3.
+
+---
+
+## Etapa 2 — Ingestão dos CSVs + sources — 2026-09-07
+
+**Objetivo:** os 9 CSVs do Olist visíveis para o dbt como `source('olist', ...)`,
+sem escrever model ainda. Separar o **EL** (carga) do **T** (dbt).
+
+**O que fizemos:**
+- `ingest/ingest.py` — para cada CSV: `CREATE OR REPLACE TABLE raw.<tabela> AS
+  SELECT *, current_timestamp AS _loaded_at, <arquivo> AS _source_file FROM
+  read_csv_auto(<caminho>)`. Nome do arquivo e caminho passam como parâmetro
+  (`?`) do DuckDB, não f-string.
+- `models/staging/_sources.yml` — declara a source `olist`, `schema: raw`, as 9
+  tabelas, cada uma com `description`.
+- `Makefile` — alvos `ingest`, `build`, `all` (= `ingest` + `build`), `.PHONY`.
+- `scripts/explorar.py` — abre a UI web do DuckDB (read-only) para navegar as
+  tabelas.
+- `requirements.txt` — versões de `dbt-duckdb` e `duckdb` fixadas.
+
+**Por quê:**
+- **EL fora do dbt:** o dbt é só transformação (T). O `ingest.py` é o "EL" do
+  ELT — na POC 3 ele vira uma task do Airflow sem o dbt mudar nada. Ver
+  [o-que-e-dbt.md](02-camadas-e-dbt/o-que-e-dbt.md).
+- **`CREATE OR REPLACE`:** ingestão idempotente — rodar 2x dá o mesmo resultado,
+  simula "chegou a pasta de segunda-feira, recarrego tudo".
+- **Colunas `_loaded_at` / `_source_file`:** padrão bronze — rastrear quando cada
+  dado entrou e de qual arquivo. Depois alimentam o `source freshness`.
+- **`source()` só no staging:** um ponto de contato por fonte. Do intermediate
+  pra frente é tudo `ref()`. Ver
+  [sources-e-ingestao.md](02-camadas-e-dbt/sources-e-ingestao.md).
+
+**Resultado:** 9 tabelas em `raw.*`, contagens conferem com o dataset Olist
+padrão:
+
+| tabela | linhas |
+|---|---|
+| `raw.orders` | 99.441 |
+| `raw.customers` | 99.441 |
+| `raw.geolocation` | 1.000.163 |
+| `raw.order_items` | 112.650 |
+| `raw.order_payments` | 103.886 |
+| `raw.order_reviews` | 99.224 |
+| `raw.products` | 32.951 |
+| `raw.sellers` | 3.095 |
+| `raw.product_category_name_translation` | 71 |
+
+`dbt list --resource-type source` mostra as 9; `dbt build` = *"Found 9 sources /
+Nothing to do"* (verde esperado, 0 models).
+
+**Pendências / aprendizados:**
+- **BOM não deu problema.** O `read_csv_auto` do DuckDB removeu o BOM do CSV de
+  tradução sozinho — a 1ª coluna veio `product_category_name` limpa. Risca a
+  pendência da Etapa 0.
+- **Valores monetários estão em reais, não centavos.** `price` tem decimais
+  (58.9, 12.99), média ~R$120, máx R$6.735. Se fossem centavos a média seria
+  R$1,20. → A macro `centavos_para_reais()` da arquitetura de referência **não
+  serve para este dataset.** (Confirmar no dado antes de aplicar solução pronta.)
+- `price`, `freight_value`, `payment_value` vieram `DOUBLE` (ponto flutuante).
+  Dinheiro em float acumula erro em `SUM` → `CAST(... AS DECIMAL(10,2))` no
+  staging.
+- CEP-prefixo (`customer_zip_code_prefix`, `geolocation_zip_code_prefix`) veio
+  `VARCHAR` — zero à esquerda preservado (`01003`). Manter como texto (CEP não
+  se soma).
+- `_loaded_at` ficou `TIMESTAMP WITH TIME ZONE` (`current_timestamp` retorna com
+  fuso), enquanto os timestamps das fontes são sem fuso. Decidir no staging se
+  normaliza (`now()::timestamp`).
 
 ---
 

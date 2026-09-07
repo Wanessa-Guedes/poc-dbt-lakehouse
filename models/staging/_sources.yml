@@ -1,0 +1,27 @@
+# Um source é a declaração, dentro do dbt, de uma tabela que já existe no banco e que o dbt não criou 
+
+version: 2
+
+sources:
+  - name: olist
+    description: "CSVs do Olist carregados em raw pelo ingest.py"
+    schema: raw
+    tables:
+      - name: customers
+        description: "Tabela de clientes do Olist"
+      - name: geolocation
+        description: "Tabela de geolocalização do Olist"
+      - name: order_items
+        description: "Tabela de itens de pedidos do Olist"
+      - name: order_payments
+        description: "Tabela de pagamentos de pedidos do Olist"
+      - name: order_reviews
+        description: "Tabela de avaliações de pedidos do Olist"
+      - name: orders
+        description: "Tabela de pedidos do Olist"
+      - name: products
+        description: "Tabela de produtos do Olist"
+      - name: sellers
+        description: "Tabela de vendedores do Olist"
+      - name: product_category_name_translation
+        description: "Tabela de tradução das categorias dos produtos do Olist"

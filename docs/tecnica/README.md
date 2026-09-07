@@ -25,6 +25,7 @@ entrevista e servir de portfólio no GitHub.
 | Página | Assunto |
 |---|---|
 | [o-que-e-dbt.md](02-camadas-e-dbt/o-que-e-dbt.md) | Model = 1 SELECT; `ref()` e o DAG; config; comandos |
+| [sources-e-ingestao.md](02-camadas-e-dbt/sources-e-ingestao.md) | Fronteira EL↔T; o que é `source`; ingestão idempotente; colunas de auditoria |
 | [o-que-e-duckdb.md](02-camadas-e-dbt/o-que-e-duckdb.md) | O "SQLite analítico"; por que serve aqui; limites |
 | [materializacoes.md](02-camadas-e-dbt/materializacoes.md) | view / table / ephemeral / incremental — o trade-off |
 | [bronze-silver-gold.md](02-camadas-e-dbt/bronze-silver-gold.md) | O que entra e sai de cada camada; mapeamento para dbt |
