@@ -29,6 +29,7 @@ entrevista e servir de portfólio no GitHub.
 | [o-que-e-duckdb.md](02-camadas-e-dbt/o-que-e-duckdb.md) | O "SQLite analítico"; por que serve aqui; limites |
 | [materializacoes.md](02-camadas-e-dbt/materializacoes.md) | view / table / ephemeral / incremental — o trade-off |
 | [bronze-silver-gold.md](02-camadas-e-dbt/bronze-silver-gold.md) | O que entra e sai de cada camada; mapeamento para dbt |
+| [staging.md](02-camadas-e-dbt/staging.md) | O padrão de um `stg_*`: 3 CTEs, o que pode/não pode, decisões aplicadas |
 | [onde-mora-a-regra-de-negocio.md](02-camadas-e-dbt/onde-mora-a-regra-de-negocio.md) | Regra calculada uma vez, na silver; o fato só carrega |
 
 ## 03 — Qualidade e testes

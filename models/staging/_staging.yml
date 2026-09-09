@@ -1,0 +1,244 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: "Tabela de pedidos do Olist, sem regras de negócio, 1 linha por pedido"
+    columns:
+      - name: order_id
+        description: "Identificador do pedido"
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: "Identificador do cliente"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: order_status
+        description: "Status do pedido"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [delivered, shipped, canceled, unavailable, invoiced, processing, created, approved]
+      - name: order_purchase_timestamp
+        description: "Data e hora da compra do pedido"
+        tests:
+          - not_null
+      - name: order_approved_at
+        description: "Data e hora da aprovação do pedido"
+      - name: order_delivered_carrier_date
+        description: "Data e hora da entrega do pedido ao transportador"  
+      - name: order_delivered_customer_date # nulo esperado p/ não entregues
+        description: "Data e hora da entrega do pedido ao cliente"
+      - name: order_estimated_delivery_date
+        description: "Data e hora estimada da entrega do pedido ao cliente"
+      - name: _loaded_at
+        description: "Data e hora do carregamento do registro no banco"
+      - name: _source_file
+        description: "Nome do arquivo de origem do registro"
+
+  - name: stg_customers
+    description: "Clientes do Olist. 1 linha por customer_id (a chave do pedido). customer_unique_id é a pessoa real e repete — conformar é trabalho da silver."
+    columns:
+      - name: customer_id
+        description: "Chave do cliente NA TABELA DE PEDIDOS (muda a cada pedido)"
+        tests:
+          - not_null
+          - unique
+      - name: customer_unique_id
+        description: "Identificador da pessoa real; repete entre pedidos"
+        tests:
+          - not_null
+      - name: customer_zip_code_prefix
+        description: "Prefixo do CEP do cliente (texto)"
+        tests:
+          - not_null
+      - name: customer_city
+        description: "Cidade do cliente"
+      - name: customer_state
+        description: "UF do cliente"
+
+  - name: stg_order_items
+    description: "Itens de pedido do Olist. Grão = order_id + order_item_id (1 linha por item). NUNCA somar métrica de pedido aqui sem cuidado com fan-out."
+    columns:
+      - name: order_id
+        description: "Pedido a que o item pertence"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+      - name: order_item_id
+        description: "Sequencial do item dentro do pedido (1, 2, 3...)"
+        tests:
+          - not_null
+      # unicidade do grão composto (order_id + order_item_id): precisa de
+      # dbt_utils.unique_combination_of_columns — adicionar quando instalarmos o pacote
+      - name: product_id
+        description: "Produto do item"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_products')
+                field: product_id
+      - name: seller_id
+        description: "Vendedor do item"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_sellers')
+                field: seller_id
+      - name: shipping_limit_date
+        description: "Prazo do vendedor para postar o item"
+      - name: price
+        description: "Preço do item em reais (DECIMAL 10,2)"
+        tests:
+          - not_null
+      - name: freight_value
+        description: "Frete do item em reais (DECIMAL 10,2)"
+        tests:
+          - not_null
+
+  - name: stg_order_payments
+    description: "Transações de pagamento do Olist. Grão = order_id + payment_sequential. Fica em fato separado do fct_order_items para não dar fan-out no payment_value."
+    columns:
+      - name: order_id
+        description: "Pedido pago"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+      - name: payment_sequential
+        description: "Sequencial da forma de pagamento dentro do pedido"
+        tests:
+          - not_null
+      # grão composto (order_id + payment_sequential): idem stg_order_items, aguarda dbt_utils
+      - name: payment_type
+        description: "Forma de pagamento"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [credit_card, boleto, voucher, debit_card, not_defined]
+      - name: payment_installments
+        description: "Número de parcelas"
+        tests:
+          - not_null
+      - name: payment_value
+        description: "Valor pago nessa transação em reais (DECIMAL 10,2)"
+        tests:
+          - not_null
+
+  - name: stg_order_reviews
+    description: "Avaliações do Olist. Um pedido pode ter mais de uma review; agregar para 1 por pedido é trabalho da silver."
+    columns:
+      - name: review_id
+        description: "Identificador da avaliação"
+        tests:
+          - not_null
+          # SEM unique: a extração tem review_id repetido (99.224 linhas / 98.410 ids).
+          # Deduplicar é trabalho da silver.
+      - name: order_id
+        description: "Pedido avaliado"
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+      - name: review_score
+        description: "Nota de 1 a 5"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: review_comment_title
+        description: "Título do comentário (quase sempre vazio)"
+      - name: review_comment_message
+        description: "Texto do comentário (quase sempre vazio)"
+      - name: review_creation_date
+        description: "Data em que a pesquisa de satisfação foi enviada"
+      - name: review_answer_timestamp
+        description: "Data e hora em que o cliente respondeu"
+
+  - name: stg_products
+    description: "Produtos do Olist. 1 linha por product_id. product_category_name vem em PT e pode ser nula — join com a tradução e coalesce são da silver."
+    columns:
+      - name: product_id
+        description: "Identificador do produto"
+        tests:
+          - not_null
+          - unique
+      - name: product_category_name
+        description: "Categoria em português; NULA para 610 produtos (tratada na silver)"
+      - name: product_name_length
+        description: "Nº de caracteres do nome do anúncio (typo 'lenght' corrigido no staging)"
+      - name: product_description_length
+        description: "Nº de caracteres da descrição do anúncio"
+      - name: product_photos_qty
+        description: "Quantidade de fotos do anúncio"
+      - name: product_weight_g
+        description: "Peso do produto em gramas"
+      - name: product_length_cm
+        description: "Comprimento do produto em cm"
+      - name: product_height_cm
+        description: "Altura do produto em cm"
+      - name: product_width_cm
+        description: "Largura do produto em cm"
+
+  - name: stg_sellers
+    description: "Vendedores do Olist. 1 linha por seller_id."
+    columns:
+      - name: seller_id
+        description: "Identificador do vendedor"
+        tests:
+          - not_null
+          - unique
+      - name: seller_zip_code_prefix
+        description: "Prefixo do CEP do vendedor (texto)"
+        tests:
+          - not_null
+      - name: seller_city
+        description: "Cidade do vendedor"
+      - name: seller_state
+        description: "UF do vendedor"
+
+  - name: stg_geolocation
+    description: "Coordenadas por prefixo de CEP. MULTIVALORADO: várias linhas por prefixo. Reduzir a 1 por prefixo (centroide ou primeira) é da silver — por isso nenhum teste de unique aqui."
+    columns:
+      - name: geolocation_zip_code_prefix
+        description: "Prefixo do CEP (texto). Chave, mas não única nesta camada"
+        tests:
+          - not_null
+      - name: geolocation_lat
+        description: "Latitude"
+      - name: geolocation_lng
+        description: "Longitude"
+      - name: geolocation_city
+        description: "Cidade"
+      - name: geolocation_state
+        description: "UF"
+
+  - name: stg_product_category_name_translation
+    description: "De-para de categoria: PT -> EN. 1 linha por categoria."
+    columns:
+      - name: product_category_name
+        description: "Nome da categoria em português (chave de join com stg_products)"
+        tests:
+          - not_null
+          - unique
+      - name: product_category_name_english
+        description: "Nome da categoria em inglês"
+        tests:
+          - not_null

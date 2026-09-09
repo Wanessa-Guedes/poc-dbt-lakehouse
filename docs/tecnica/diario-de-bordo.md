@@ -195,5 +195,57 @@ Nothing to do"* (verde esperado, 0 models).
   orquestra entre sistemas e agenda; dbt infere o DAG dos `ref()` e roda a
   transformação. Complementares.
 
+## Etapa 3 — Staging (bronze no dbt) — 2026-09-08
+
+**Objetivo:** uma view `stg_*` por fonte, 1:1 com a `raw`, só arrumando a forma
+(renomear, tipar, normalizar fuso). Sem join, sem dedup, sem regra de negócio.
+
+**O que fizemos:**
+- 9 models em `models/staging/`, um por source, todos no padrão de 3 CTEs
+  (`source` "burra" com `select *` → `renamed` com o `SELECT` coluna a coluna →
+  `select * from renamed`). Detalhe do padrão em
+  [staging.md](02-camadas-e-dbt/staging.md).
+- `stg_orders` escrito pela Wanessa; os outros 8 gerados no mesmo molde depois de
+  o conceito estar claro.
+- Decisões da Etapa 2 aplicadas: `cast(... as decimal(10,2))` em `price`,
+  `freight_value`, `payment_value`; `_loaded_at::timestamp` em todos; CEP-prefixo
+  e coordenadas mantidos como estavam; typo `lenght`→`length` corrigido em
+  `stg_products`.
+
+**Por quê:**
+- **View** (config da pasta): staging é barato de recriar e sempre lê o dado
+  fresco da `raw`; ninguém consulta staging direto em produção.
+- **`select *` na CTE `source`, colunas explícitas na `renamed`:** um lugar só pra
+  ver a origem; e mudança de schema na fonte não vaza sozinha pro projeto.
+- **Cast de dinheiro no staging:** `DOUBLE`→`DECIMAL` uma vez, na entrada, pra
+  nenhuma soma a jusante herdar erro de float.
+- **Colunas problemáticas só declaradas:** `customer_unique_id`, categoria
+  nula/PT, múltiplos reviews, geolocation multivalorado — o tratamento é da
+  silver, staging não julga.
+
+**Resultado:** `dbt run --select staging` = PASS 9/9. Contagem de cada `stg_*`
+bate exatamente com a `raw` correspondente (99.441 orders, 112.650 order_items,
+1.000.163 geolocation, etc.). `stg_order_items.price` agora é `DECIMAL(10,2)`,
+`_loaded_at` é `TIMESTAMP` sem fuso.
+
+Depois: `models/staging/_staging.yml` com `description` de todos os models/colunas
+e 41 testes (PK `unique`+`not_null`, `relationships` entre os staging,
+`accepted_values` nos enums). `dbt build --select staging` = 9 models + 41 testes,
+tudo verde. Detalhe da cobertura em
+[03-qualidade-e-testes/dbt-tests.md](03-qualidade-e-testes/dbt-tests.md).
+
+**Pendências / aprendizados:**
+- Models estão todos no schema `main` junto com `raw`. Dá pra separar por camada
+  (`+schema: staging` / `marts` no `dbt_project.yml`) — fica pra decidir.
+- **Sintaxe de teste mudou no dbt 1.10+:** argumentos (`to`, `field`, `values`)
+  agora vão sob `arguments:`. A forma antiga roda mas dá
+  `MissingArgumentsPropertyInGenericTestDeprecation`. Já corrigido no `_staging.yml`.
+- **Grão composto sem teste de unicidade:** `order_id`+`order_item_id` e
+  `order_id`+`payment_sequential` só têm `not_null`. O `unique` da combinação
+  precisa de `dbt_utils` — instalar o pacote quando começar os marts.
+- `review_id` não é único na origem (dup de extração) → só `not_null` no staging.
+- `stg_geolocation` tem 1.000.163 linhas (multivalorado) — a redução para 1 por
+  prefixo de CEP é problema da silver, anotado.
+
 <!-- próximas etapas entram aqui -->
 

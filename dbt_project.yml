@@ -1,20 +1,20 @@
 # o projeto
-name: 'poc_dbt_lakehouse'
-version: '1.0.0'
-profile: 'poc_dbt_lakehouse'  # tem que bater com o nome no profiles.yml
+name: 'poc_dbt_lakehouse' # nome do projeto (usado no bloco models: também)
+version: '1.0.0'  # versão do SEU projeto, livre
+profile: 'poc_dbt_lakehouse'  # <<< a ponte: "use a conexão com esse nome no profiles.yml"
 
-model-paths: ["models"]
-seed-paths: ["seeds"]
-snapshot-paths: ["snapshots"]
+model-paths: ["models"] # onde o dbt procura os .sql de model
+seed-paths: ["seeds"] # onde procura CSVs de seed
+snapshot-paths: ["snapshots"] # etc — são só pastas
 macro-paths: ["macros"]
 test-paths: ["tests"]
 
 clean-targets: ["target", "dbt_packages"] # o que o dbt vai limpar quando rodar o comando dbt clean
 
 models:
-  poc_dbt_lakehouse:
-    staging:
-      +materialized: view #bronze: barato, sempre reflete a fonte
+  poc_dbt_lakehouse: # tem que ser o mesmo `name:` lá de cima
+    staging: # = a pasta models/staging/
+      +materialized: view  # todo model dessa pasta vira VIEW -- O + marca "isso é uma config, não uma subpasta".
     intermediate:
       +materialized: table #silver: idem, nada consome direto
     marts:

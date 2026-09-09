@@ -1,8 +1,8 @@
 # a conexão com o DuckDB
-poc_dbt_lakehouse:
-  target: dev
+poc_dbt_lakehouse: # <<< esse nome tem que bater com `profile:` do dbt_project.yml
+  target: dev # qual "output" usar por padrão
   outputs:
-    dev:
-      type: duckdb
-      path: dev.duckdb
-      threads: 4
+    dev: # um ambiente chamado "dev"
+      type: duckdb # qual banco (duckdb, postgres, snowflake, bigquery...)
+      path: dev.duckdb # config específica do duckdb: o arquivo do banco
+      threads: 4 # quantos models rodam em paralelo

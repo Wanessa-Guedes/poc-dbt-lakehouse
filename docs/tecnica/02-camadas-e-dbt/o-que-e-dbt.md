@@ -100,6 +100,45 @@ Ligados pelo nome do `profile:`. O `dbt_project.yml` diz qual profile usar; o
 Ordem de busca do `profiles.yml`: `--profiles-dir` → variável de ambiente →
 **pasta atual** → `~/.dbt/`. Deixamos na raiz do repo e rodamos o dbt de lá.
 
+### `target` e múltiplos ambientes
+
+Dentro do profile, `outputs:` pode ter vários ambientes (`dev`, `prod`, `ci`...) e
+`target:` diz qual é o padrão:
+
+```yaml
+poc_dbt_lakehouse:
+  target: dev
+  outputs:
+    dev:  { type: duckdb, path: dev.duckdb,          threads: 4 }
+    prod: { type: duckdb, path: /dados/prod.duckdb,  threads: 8 }
+```
+
+- `dbt run` → usa `dev`
+- `dbt run --target prod` → **mesmo código**, banco diferente
+
+É assim que o mesmo projeto roda na máquina, no CI e em produção. Num banco com
+senha, o `prod` teria `host` / `user` / `password` — e o `password` viria de
+variável de ambiente (`"{{ env_var('DBT_PASSWORD') }}"`), nunca escrito no arquivo.
+Esse é o motivo de o `profiles.yml` normalmente ficar fora do Git.
+
+## `seed` não é o dado do negócio
+
+`data/raw/*.csv` (os 99k pedidos do Olist) **não são seeds**. Seed é uma tabelinha
+de apoio, pequena, que você mantém à mão e versiona no Git.
+
+| | `data/raw/*.csv` | `seeds/*.csv` |
+|---|---|---|
+| O que é | dado de verdade, chega de um sistema | referência manual (de-para, feriados, grupos) |
+| Tamanho | grande (aqui ~120 MB) | KB |
+| Entra no banco via | `ingest.py` → `raw.*` (o EL) | `dbt seed` → schema do projeto |
+| Declarado como | `source('olist', ...)` no `_sources.yml` | vira `ref('nome_do_csv')` sozinho |
+| Muda | toda semana | quase nunca |
+
+A pasta `seeds/` só passa a existir quando houver um seed de verdade — a linha
+`seed-paths: ["seeds"]` no `dbt_project.yml` é só "onde procurar, se houver".
+Candidato provável nesta POC: `regioes_br.csv` (UF → região) para o "% no prazo
+por região" do desafio.
+
 ## Estrutura de pastas
 
 | Pasta | Conteúdo | Camada |
